@@ -221,9 +221,11 @@ export async function adapter(
         params.request.nextConfig?.experimental?.after ??
         !!process.env.__NEXT_AFTER
 
+      let waitUntil: WrapperRenderOpts['waitUntil'] = undefined
       let closeController: CloseController | undefined = undefined
 
       if (isAfterEnabled) {
+        waitUntil = event.waitUntil.bind(event)
         closeController = new CloseController()
       }
 
@@ -252,7 +254,7 @@ export async function adapter(
                     previewModeEncryptionKey: '',
                     previewModeSigningKey: '',
                   },
-                  waitUntil: undefined,
+                  waitUntil,
                   onClose: closeController
                     ? closeController.onClose.bind(closeController)
                     : undefined,
