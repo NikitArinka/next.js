@@ -21,6 +21,7 @@ import { requestAsyncStorage } from '../../client/components/request-async-stora
 import { getTracer } from '../lib/trace/tracer'
 import type { TextMapGetter } from 'next/dist/compiled/@opentelemetry/api'
 import { MiddlewareSpan } from '../lib/trace/constants'
+import { CloseController } from './web-on-close'
 
 export class NextRequestHint extends NextRequest {
   sourcePage: string
@@ -220,6 +221,12 @@ export async function adapter(
         params.request.nextConfig?.experimental?.after ??
         !!process.env.__NEXT_AFTER
 
+      let closeController: CloseController | undefined = undefined
+
+      if (isAfterEnabled) {
+        closeController = new CloseController()
+      }
+
       return getTracer().trace(
         MiddlewareSpan.execute,
         {
@@ -229,30 +236,45 @@ export async function adapter(
             'http.method': request.method,
           },
         },
-        () =>
-          RequestAsyncStorageWrapper.wrap(
-            requestAsyncStorage,
-            {
-              req: request,
-              renderOpts: {
-                onUpdateCookies: (cookies) => {
-                  cookiesFromResponse = cookies
+        async () => {
+          try {
+            return await RequestAsyncStorageWrapper.wrap(
+              requestAsyncStorage,
+              {
+                req: request,
+                renderOpts: {
+                  onUpdateCookies: (cookies) => {
+                    cookiesFromResponse = cookies
+                  },
+                  // @ts-expect-error TODO: investigate why previewProps isn't on RenderOpts
+                  previewProps: prerenderManifest?.preview || {
+                    previewModeId: 'development-id',
+                    previewModeEncryptionKey: '',
+                    previewModeSigningKey: '',
+                  },
+                  waitUntil: undefined,
+                  onClose: closeController
+                    ? closeController.onClose.bind(closeController)
+                    : undefined,
+                  experimental: {
+                    after: isAfterEnabled,
+                  } as WrapperRenderOpts['experimental'], // FIXME: not all required properties of `experimental` are available here
                 },
-                // @ts-expect-error: TODO: investigate why previewProps isn't on RenderOpts
-                previewProps: prerenderManifest?.preview || {
-                  previewModeId: 'development-id',
-                  previewModeEncryptionKey: '',
-                  previewModeSigningKey: '',
-                },
-                waitUntil: undefined,
-                onClose: undefined,
-                experimental: {
-                  after: isAfterEnabled,
-                } as WrapperRenderOpts['experimental'], // FIXME: not all required properties of `experimental` are available here
               },
-            },
-            () => params.handler(request, event)
-          )
+              () => params.handler(request, event)
+            )
+          } finally {
+            // middleware cannot stream, so we can consider the response closed
+            // as soon as the handler returns.
+            if (closeController) {
+              // we can delay running it until a bit later --
+              // if it's needed, we'll have a `waitUntil` lock anyway.
+              setTimeout(() => {
+                closeController!.dispatchClose()
+              }, 0)
+            }
+          }
+        }
       )
     }
     return params.handler(request, event)
