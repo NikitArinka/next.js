@@ -252,6 +252,8 @@ export class AppRouteRouteModule extends RouteModule<
 
     requestContext.renderOpts = {
       previewProps: context.prerenderManifest.preview,
+      waitUntil: context.renderOpts.waitUntil,
+      onClose: context.renderOpts.onClose,
       // @ts-expect-error: not all required properties are available here for some reason
       experimental: context.renderOpts.experimental,
     }
@@ -396,7 +398,7 @@ export class AppRouteRouteModule extends RouteModule<
                     context.renderOpts.fetchMetrics =
                       staticGenerationStore.fetchMetrics
 
-                    context.renderOpts.waitUntil = Promise.all([
+                    context.renderOpts.pendingWaitUntil = Promise.all([
                       staticGenerationStore.incrementalCache?.revalidateTag(
                         staticGenerationStore.revalidatedTags || []
                       ),

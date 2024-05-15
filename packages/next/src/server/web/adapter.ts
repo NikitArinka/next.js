@@ -244,6 +244,8 @@ export async function adapter(
                   previewModeEncryptionKey: '',
                   previewModeSigningKey: '',
                 },
+                waitUntil: undefined,
+                onClose: undefined,
                 experimental: {
                   after: isAfterEnabled,
                 } as WrapperRenderOpts['experimental'], // FIXME: not all required properties of `experimental` are available here
