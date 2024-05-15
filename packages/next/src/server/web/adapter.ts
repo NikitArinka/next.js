@@ -13,7 +13,10 @@ import { stripInternalSearchParams } from '../internal-utils'
 import { normalizeRscURL } from '../../shared/lib/router/utils/app-paths'
 import { FLIGHT_PARAMETERS } from '../../client/components/app-router-headers'
 import { ensureInstrumentationRegistered } from './globals'
-import { RequestAsyncStorageWrapper } from '../async-storage/request-async-storage-wrapper'
+import {
+  RequestAsyncStorageWrapper,
+  type WrapperRenderOpts,
+} from '../async-storage/request-async-storage-wrapper'
 import { requestAsyncStorage } from '../../client/components/request-async-storage.external'
 import { getTracer } from '../lib/trace/tracer'
 import type { TextMapGetter } from 'next/dist/compiled/@opentelemetry/api'
@@ -208,7 +211,15 @@ export async function adapter(
     // we only care to make async storage available for middleware
     const isMiddleware =
       params.page === '/middleware' || params.page === '/src/middleware'
+
     if (isMiddleware) {
+      // if we're in an edge function, we only get a subset of `nextConfig` (no `experimental`),
+      // so we have to inject it via DefinePlugin.
+      // in `next start` this will be passed normally (see `NextNodeServer.runMiddleware`).
+      const isAfterEnabled =
+        params.request.nextConfig?.experimental?.after ??
+        !!process.env.__NEXT_AFTER
+
       return getTracer().trace(
         MiddlewareSpan.execute,
         {
@@ -233,6 +244,9 @@ export async function adapter(
                   previewModeEncryptionKey: '',
                   previewModeSigningKey: '',
                 },
+                experimental: {
+                  after: isAfterEnabled,
+                } as WrapperRenderOpts['experimental'], // FIXME: not all required properties of `experimental` are available here
               },
             },
             () => params.handler(request, event)

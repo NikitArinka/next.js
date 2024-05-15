@@ -20,6 +20,7 @@ import {
 import type { ResponseCookies } from '../web/spec-extension/cookies'
 import { RequestCookies } from '../web/spec-extension/cookies'
 import { DraftModeProvider } from './draft-mode-provider'
+import { createAfterContext, type AfterContext } from '../after/after-context'
 
 function getHeaders(headers: Headers | IncomingHttpHeaders): ReadonlyHeaders {
   const cleaned = HeadersAdapter.from(headers)
@@ -45,10 +46,14 @@ function getMutableCookies(
   return MutableRequestCookiesAdapter.wrap(cookies, onUpdateCookies)
 }
 
+export type WrapperRenderOpts = RenderOpts & {
+  experimental: Pick<RenderOpts['experimental'], 'after'>
+}
+
 export type RequestContext = {
   req: IncomingMessage | BaseNextRequest | NextRequest
   res?: ServerResponse | BaseNextResponse
-  renderOpts?: RenderOpts
+  renderOpts?: WrapperRenderOpts
 }
 
 export const RequestAsyncStorageWrapper: AsyncStorageWrapper<
@@ -74,6 +79,14 @@ export const RequestAsyncStorageWrapper: AsyncStorageWrapper<
     if (renderOpts && 'previewProps' in renderOpts) {
       // TODO: investigate why previewProps isn't on RenderOpts
       previewProps = (renderOpts as any).previewProps
+    }
+
+    let afterContext: AfterContext | undefined
+    const isAfterEnabled = renderOpts?.experimental?.after ?? false
+    if (!renderOpts || !isAfterEnabled) {
+      afterContext = undefined
+    } else {
+      afterContext = createAfterContext()
     }
 
     function defaultOnUpdateCookies(cookies: string[]) {
@@ -147,10 +160,11 @@ export const RequestAsyncStorageWrapper: AsyncStorageWrapper<
 
         return cache.draftMode
       },
+
       reactLoadableManifest: renderOpts?.reactLoadableManifest || {},
       assetPrefix: renderOpts?.assetPrefix || '',
+      afterContext,
     }
-
     return storage.run(store, callback, store)
   },
 }
